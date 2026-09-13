@@ -13,7 +13,6 @@ pipeline {
     environment {
         TF_IN_AUTOMATION = 'true'
         NOTIFY_EMAIL = "yousramamdouh1405@gmail.com"
-        AWS_CRED_ID  = "aws-terraform-deploy" // اسم الـ Credentials المسجلة في Jenkins
     }
 
     stages {
@@ -28,9 +27,7 @@ pipeline {
             steps {
                 sh '''
                     set -o pipefail
-                    terraform init \
-                      -reconfigure \
-                      2>&1 | tee terraform-init.log
+                    terraform init -reconfigure 2>&1 | tee terraform-init.log
                 '''
             }
         }
@@ -56,40 +53,38 @@ pipeline {
 
         stage('Terraform Plan') {
             steps {
-                withCredentials([aws(credentialsId: env.AWS_CRED_ID, accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                    sh '''
-                        set -o pipefail
+                sh '''
+                    set -o pipefail
 
-                        terraform plan \
-                          -var-file=${ENV}.tfvars \
-                          -out=tfplan \
-                          2>&1 | tee terraform-plan.log
-                    '''
-                }
+                    terraform plan \
+                      -var-file=${ENV}.tfvars \
+                      -out=tfplan \
+                      2>&1 | tee terraform-plan.log
+                '''
             }
         }
 
         stage('Approval') {
             steps {
+                // تظهر لك في Jenkins خيارات الموافقة أو الإلغاء يدوياً
                 input(
-                    message: "Terraform plan is ready. Apply ${ENV}?",
-                    ok: "Approve and Apply"
+                    message: "Terraform plan for VPC is ready. Do you want to Apply to ${ENV}?",
+                    ok: "Approve and Apply",
+                    submitterParameter: 'APPROVER'
                 )
             }
         }
 
         stage('Terraform Apply') {
             steps {
-                withCredentials([aws(credentialsId: env.AWS_CRED_ID, accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                    sh '''
-                        set -o pipefail
+                sh '''
+                    set -o pipefail
 
-                        terraform apply \
-                          -auto-approve \
-                          tfplan \
-                          2>&1 | tee terraform-apply.log
-                    '''
-                }
+                    terraform apply \
+                      -auto-approve \
+                      tfplan \
+                      2>&1 | tee terraform-apply.log
+                '''
             }
         }
     }
@@ -102,18 +97,15 @@ pipeline {
 
         success {
             emailext(
-                subject: "SUCCESS: Terraform ${ENV} - Build #${BUILD_NUMBER}",
+                subject: "SUCCESS: Terraform VPC ${ENV} - Build #${BUILD_NUMBER}",
                 body: """
-Terraform deployment completed successfully.
+VPC deployment completed successfully.
 
 Environment: ${ENV}
 Build Number: ${BUILD_NUMBER}
 Job: ${JOB_NAME}
 
-Terraform Apply: SUCCESS
-
-Jenkins:
-${BUILD_URL}
+Jenkins: ${BUILD_URL}
 """,
                 to: "${NOTIFY_EMAIL}"
             )
@@ -134,20 +126,20 @@ ${BUILD_URL}
                 }
 
                 emailext(
-                    subject: "FAILED: Terraform ${ENV} - Build #${BUILD_NUMBER}",
+                    subject: "FAILED: Terraform VPC ${ENV} - Build #${BUILD_NUMBER}",
                     body: """
-Terraform deployment FAILED.
+Terraform VPC deployment FAILED.
 
 Environment: ${ENV}
 Build Number: ${BUILD_NUMBER}
 Job: ${JOB_NAME}
 
-Failure Reason:
+Failure Details & Reason:
+----------------------------------------
 ${reason}
+----------------------------------------
 
-Check Jenkins Console:
-
-${BUILD_URL}console
+Console URL: ${BUILD_URL}console
 """,
                     to: "${NOTIFY_EMAIL}"
                 )
@@ -156,18 +148,12 @@ ${BUILD_URL}console
 
         aborted {
             emailext(
-                subject: "ABORTED: Terraform ${ENV} - Build #${BUILD_NUMBER}",
+                subject: "ABORTED: Terraform VPC ${ENV} - Build #${BUILD_NUMBER}",
                 body: """
-Terraform deployment was ABORTED.
+Terraform deployment was ABORTED by user.
 
 Environment: ${ENV}
 Build Number: ${BUILD_NUMBER}
-Job: ${JOB_NAME}
-
-The deployment was stopped by the user before completion.
-
-Jenkins:
-${BUILD_URL}console
 """,
                 to: "${NOTIFY_EMAIL}"
             )
