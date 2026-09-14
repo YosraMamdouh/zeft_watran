@@ -1,3 +1,4 @@
+```groovy
 pipeline {
 
     agent any
@@ -12,7 +13,7 @@ pipeline {
 
     environment {
         TF_IN_AUTOMATION = 'true'
-        NOTIFY_EMAIL = "yousramamdouh1405@gmail.com"
+        NOTIFY_EMAIL = 'yousramamdouh1405@gmail.com'
     }
 
     stages {
@@ -27,6 +28,11 @@ pipeline {
             steps {
                 sh '''
                     set -o pipefail
+
+                    # Remove previous Terraform initialization
+                    # to avoid backend configuration conflicts
+                    rm -rf .terraform
+
                     terraform init -reconfigure 2>&1 | tee terraform-init.log
                 '''
             }
@@ -35,7 +41,11 @@ pipeline {
         stage('Workspace Select') {
             steps {
                 sh '''
-                    terraform workspace select ${ENV} || terraform workspace new ${ENV}
+                    set -e
+
+                    terraform workspace select "${ENV}" || \
+                    terraform workspace new "${ENV}"
+
                     terraform workspace show
                 '''
             }
@@ -45,6 +55,7 @@ pipeline {
             steps {
                 sh '''
                     set -o pipefail
+
                     terraform fmt -check -recursive
                     terraform validate
                 '''
@@ -57,7 +68,7 @@ pipeline {
                     set -o pipefail
 
                     terraform plan \
-                      -var-file=${ENV}.tfvars \
+                      -var-file="${ENV}.tfvars" \
                       -out=tfplan \
                       2>&1 | tee terraform-plan.log
                 '''
@@ -66,7 +77,6 @@ pipeline {
 
         stage('Approval') {
             steps {
-                // تظهر لك في Jenkins خيارات الموافقة أو الإلغاء يدوياً
                 input(
                     message: "Terraform plan for VPC is ready. Do you want to Apply to ${ENV}?",
                     ok: "Approve and Apply",
@@ -92,7 +102,10 @@ pipeline {
     post {
 
         always {
-            archiveArtifacts artifacts: 'terraform-*.log, tfplan', allowEmptyArchive: true
+            archiveArtifacts(
+                artifacts: 'terraform-*.log, tfplan',
+                allowEmptyArchive: true
+            )
         }
 
         success {
@@ -160,3 +173,38 @@ Build Number: ${BUILD_NUMBER}
         }
     }
 }
+```
+
+### The main fix
+
+I added:
+
+```bash
+rm -rf .terraform
+terraform init -reconfigure
+```
+
+This forces Jenkins to remove the old Terraform initialization and initialize the backend again, which addresses the:
+
+```text
+Backend initialization required
+Reason: Unsetting the previously set backend "local"
+```
+
+error.
+
+I also changed:
+
+```bash
+terraform workspace select ${ENV}
+```
+
+to:
+
+```bash
+terraform workspace select "${ENV}"
+```
+
+and similarly quoted the `.tfvars` filename for safer shell handling.
+
+After replacing the Jenkinsfile, run the pipeline and select **`dev`**.
