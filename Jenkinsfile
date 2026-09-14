@@ -92,5 +92,25 @@ ${BUILD_URL}console
                 to: "${NOTIFY_EMAIL}"
             )
         }
+
+        aborted {
+            emailext(
+                subject: "ABORTED: Terraform ${ENV}",
+                body: """
+Terraform deployment was ABORTED.
+
+This usually happens when the approval step was rejected or the build was
+manually cancelled.
+
+Environment: ${ENV}
+Build Number: ${BUILD_NUMBER}
+Job: ${JOB_NAME}
+
+Jenkins URL:
+${BUILD_URL}
+""",
+                to: "${NOTIFY_EMAIL}"
+            )
+        }
     }
 }
