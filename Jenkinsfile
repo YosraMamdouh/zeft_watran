@@ -95,5 +95,3 @@ ${BUILD_URL}console
         }
     }
 }
-
-This is a good **basic CI/CD Terraform pipeline** without unnecessary validation or complicated logging.
